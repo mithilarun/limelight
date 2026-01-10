@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Limelight is a macOS CLI tool for proactive automation of Philips Hue lights and scenes. It integrates with the Hue Bridge V2 API and uses 1Password CLI for secure credential storage.
 
-**Current Status:** Phase 1 (Foundation) completed. See `HUE_AUTOMATION_LLM_PLAN.org` for the complete implementation roadmap.
+**Current Status:** Phase 1 (Foundation) completed. See `.claude/HUE_AUTOMATION_LLM_PLAN.org` for the complete implementation roadmap.
 
 ## Build and Development Commands
 
@@ -102,9 +102,16 @@ The setup process (`internal/bridge/auth.go`):
 - **Content-Type**: `application/json`
 - **TLS**: Self-signed certificate (verification disabled)
 
+## Project Planning and Documentation
+
+- **Plan Files**: All LLM plan files (`.org` format) are stored in `.claude/` directory
+- **Current Plan**: `.claude/HUE_AUTOMATION_LLM_PLAN.org` - Main implementation roadmap
+- **PR Reviews**: Store PR review files as `.claude/LLM_PR_REVIEW_<PR_NUMBER>.org`
+- **New Plan Files**: Always create new `*_LLM_PLAN.org` files in `.claude/` directory
+
 ## Future Development Areas
 
-Based on `HUE_AUTOMATION_LLM_PLAN.org`, upcoming phases include:
+Based on `.claude/HUE_AUTOMATION_LLM_PLAN.org`, upcoming phases include:
 
 - **Phase 2**: SQLite schema for automation rules, sunrise/sunset calculator
 - **Phase 3**: Automation engine with triggers/conditions/actions
