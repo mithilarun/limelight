@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/mithila/limelight/internal/bridge"
-	"github.com/mithila/limelight/internal/credentials"
+	"github.com/mithilarun/limelight/internal/bridge"
+	"github.com/mithilarun/limelight/internal/credentials"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )

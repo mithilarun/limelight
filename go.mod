@@ -1,4 +1,4 @@
-module github.com/mithila/limelight
+module github.com/mithilarun/limelight
 
 go 1.24.2
 

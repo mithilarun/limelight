@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mithila/limelight/cmd/limelight/commands"
+	"github.com/mithilarun/limelight/cmd/limelight/commands"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
