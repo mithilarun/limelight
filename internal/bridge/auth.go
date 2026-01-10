@@ -66,9 +66,9 @@ func (c *Client) Authenticate(ctx context.Context, appName string) (string, erro
 		if err != nil {
 			return "", errors.Wrap(err, "executing auth request")
 		}
+		defer resp.Body.Close()
 
 		respBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err != nil {
 			return "", errors.Wrap(err, "reading auth response")
 		}
@@ -98,10 +98,18 @@ func (c *Client) Authenticate(ctx context.Context, appName string) (string, erro
 					zap.Int("max_retries", authMaxRetries),
 				)
 				lastError = errors.Newf("link button not pressed: %s", item.Error.Description)
-				time.Sleep(authRetryInterval)
+				select {
+				case <-ctx.Done():
+					return "", errors.Wrap(ctx.Err(), "authentication cancelled")
+				case <-time.After(authRetryInterval):
+				}
 				continue
 			}
 			return "", errors.Newf("hue auth error: type=%d, description=%s", item.Error.Type, item.Error.Description)
+		}
+
+		if item.Success == nil && item.Error == nil {
+			return "", errors.New("malformed auth response: both success and error are nil")
 		}
 	}
 

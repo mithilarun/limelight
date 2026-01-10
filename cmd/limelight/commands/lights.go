@@ -76,6 +76,10 @@ func newSetLightCommand(logger *zap.Logger) *cobra.Command {
 		Short: "Set light state",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if on && off {
+				return errors.New("cannot specify both --on and --off")
+			}
+
 			ctx := context.Background()
 			client, err := getAuthenticatedClient(ctx, logger)
 			if err != nil {

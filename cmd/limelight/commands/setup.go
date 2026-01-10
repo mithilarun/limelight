@@ -16,17 +16,23 @@ import (
 )
 
 func NewSetupCommand(logger *zap.Logger) *cobra.Command {
-	return &cobra.Command{
+	var authTimeout time.Duration
+
+	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Initial setup wizard for Hue bridge pairing",
 		Long:  "Guides you through the process of connecting to your Hue bridge and storing credentials",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(logger)
+			return runSetup(logger, authTimeout)
 		},
 	}
+
+	cmd.Flags().DurationVar(&authTimeout, "auth-timeout", 60*time.Second, "Timeout for bridge button press")
+
+	return cmd
 }
 
-func runSetup(logger *zap.Logger) error {
+func runSetup(logger *zap.Logger, authTimeout time.Duration) error {
 	ctx := context.Background()
 	reader := bufio.NewReader(os.Stdin)
 
@@ -89,12 +95,12 @@ func runSetup(logger *zap.Logger) error {
 
 	fmt.Println()
 	fmt.Println("Press the link button on your Hue Bridge now...")
-	fmt.Println("Waiting for button press (timeout: 60 seconds)...")
+	fmt.Printf("Waiting for button press (timeout: %v)...\n", authTimeout)
 	fmt.Println()
 
 	client := bridge.NewClient(bridgeIP, "", logger)
 
-	authCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	authCtx, cancel := context.WithTimeout(ctx, authTimeout)
 	defer cancel()
 
 	apiKey, err := client.Authenticate(authCtx, "limelight#macOS")

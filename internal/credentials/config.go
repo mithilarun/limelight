@@ -62,8 +62,14 @@ func SaveConfig(config *Config) error {
 		return errors.Wrap(err, "marshaling config")
 	}
 
-	if err := os.WriteFile(configPath, data, 0600); err != nil {
-		return errors.Wrap(err, "writing config file")
+	tmpPath := configPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+		return errors.Wrap(err, "writing temp config file")
+	}
+
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		os.Remove(tmpPath)
+		return errors.Wrap(err, "moving config file")
 	}
 
 	return nil

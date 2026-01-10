@@ -3,6 +3,7 @@ package bridge
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	apiVersion = "v2"
+	apiVersion  = "v2"
 	httpTimeout = 10 * time.Second
 )
 
@@ -31,6 +32,11 @@ func NewClient(bridgeIP, apiKey string, logger *zap.Logger) *Client {
 		apiKey:   apiKey,
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
 		},
 		logger: logger,
 	}

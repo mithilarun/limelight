@@ -1,0 +1,273 @@
+#+TITLE: PR #1 Review - Phase 1 Foundation
+#+DATE: 2026-01-10
+#+PR: https://github.com/mithilarun/limelight/pull/1
+
+* Overview
+PR implements Phase 1 foundation for Philips Hue automation tool including:
+- Hue Bridge V2 API client with button press authentication
+- 1Password CLI integration for credential storage
+- CLI interface with setup wizard, lights, and scenes commands
+- Configuration management
+
+Branch: private/mithil/initial-structure → main
+
+Commits:
+- 211fd8a feat: implement Phase 1 foundation
+- 2ae23c0 refactor: rename go module to github.com/mithilarun/limelight
+- bdaf76b chore: add .gitignore and remove binary from git
+
+* Critical Issues
+
+** BLOCKER: Missing TLS Certificate Handling
+[[file:internal/bridge/client.go::28]]
+
+The HTTP client uses HTTPS to communicate with the Hue Bridge but doesn't configure TLS certificate verification. Philips Hue bridges use self-signed certificates, so this code will fail with certificate verification errors in production.
+
+Need to either:
+1. Configure =InsecureSkipVerify= (less secure, simpler)
+2. Implement certificate pinning (more secure, complex)
+
+#+begin_src go
+// Current code at line 28-36
+httpClient: &http.Client{
+    Timeout: httpTimeout,
+},
+
+// Should be:
+httpClient: &http.Client{
+    Timeout: httpTimeout,
+    Transport: &http.Transport{
+        TLSClientConfig: &tls.Config{
+            InsecureSkipVerify: true, // Hue uses self-signed certs
+        },
+    },
+},
+#+end_src
+
+** CRITICAL: Resource Leak Potential
+[[file:internal/bridge/auth.go::70]]
+
+Response body closure happens after =io.ReadAll= instead of using defer. If =io.ReadAll= panics or there's an early return path added later, body won't be closed.
+
+#+begin_src go
+// Current code at line 65-74
+resp, err := c.httpClient.Do(req)
+if err != nil {
+    return "", errors.Wrap(err, "executing auth request")
+}
+
+respBody, err := io.ReadAll(resp.Body)
+resp.Body.Close()  // Should use defer
+if err != nil {
+    return "", errors.Wrap(err, "reading auth response")
+}
+
+// Should be:
+resp, err := c.httpClient.Do(req)
+if err != nil {
+    return "", errors.Wrap(err, "executing auth request")
+}
+defer resp.Body.Close()
+
+respBody, err := io.ReadAll(resp.Body)
+if err != nil {
+    return "", errors.Wrap(err, "reading auth response")
+}
+#+end_src
+
+* High Priority Issues
+
+** Missing Validation: Ambiguous Light State Flags
+[[file:cmd/limelight/commands/lights.go::421]]
+
+If user specifies both =--on= and =--off= flags, =--off= wins silently. This is confusing behavior. Should validate that only one is set.
+
+#+begin_src go
+// Current code at line 421-424
+targetOn := on
+if off {
+    targetOn = false
+}
+
+// Should validate mutual exclusivity:
+if on && off {
+    return errors.New("cannot specify both --on and --off")
+}
+#+end_src
+
+** Potential Nil Pointer: Ambiguous Auth Response
+[[file:internal/bridge/auth.go::85]]
+
+After checking =len(authResp) > 0=, code assumes =authResp[0]= has either =Success= or =Error= set. If both are nil (malformed response), code silently falls through and eventually returns generic "authentication failed" error without context.
+
+#+begin_src go
+// Current code at line 85-105
+item := authResp[0]
+
+if item.Success != nil {
+    // ... return success
+}
+
+if item.Error != nil {
+    // ... handle error
+}
+// Falls through if both nil - should explicitly handle this
+
+// Should add:
+if item.Success == nil && item.Error == nil {
+    return "", errors.New("malformed auth response: both success and error are nil")
+}
+#+end_src
+
+** go.mod Dependency Declarations
+[[file:go.mod::5]]
+
+All dependencies marked as =// indirect= when they're actually direct dependencies used in the code. This happens when =go mod tidy= hasn't been run properly or dependencies were added manually.
+
+Run =go mod tidy= to fix dependency declarations.
+
+** Non-Atomic Config File Writes
+[[file:internal/credentials/config.go::1422]]
+
+=SaveConfig= writes directly to config file. If process crashes during write, config becomes corrupted. Should use atomic write pattern (write to temp file, then rename).
+
+#+begin_src go
+// Current code writes directly:
+if err := os.WriteFile(configPath, data, 0600); err != nil {
+    return errors.Wrap(err, "writing config file")
+}
+
+// Should use atomic write:
+tmpPath := configPath + ".tmp"
+if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+    return errors.Wrap(err, "writing temp config file")
+}
+if err := os.Rename(tmpPath, configPath); err != nil {
+    os.Remove(tmpPath)
+    return errors.Wrap(err, "moving config file")
+}
+#+end_src
+
+* Medium Priority Issues
+
+** Hardcoded Timeout Without Override
+[[file:cmd/limelight/commands/setup.go::659]]
+
+Authentication timeout hardcoded to 60 seconds with no way to override. Some users might need more time.
+
+Consider making configurable via flag:
+#+begin_src go
+// Add flag to setup command
+var authTimeout time.Duration
+cmd.Flags().DurationVar(&authTimeout, "auth-timeout", 60*time.Second, "Timeout for bridge button press")
+#+end_src
+
+** Context Not Respected During Sleep
+[[file:internal/bridge/auth.go::101]]
+
+After checking context cancellation, code sleeps for =authRetryInterval= without rechecking context. Could delay cancellation by up to 2 seconds.
+
+#+begin_src go
+// Current code at line 95-102
+if item.Error.Type == authErrorLinkButtonNotPressed {
+    // ...
+    lastError = errors.Newf("link button not pressed: %s", item.Error.Description)
+    time.Sleep(authRetryInterval)
+    continue
+}
+
+// Should use context-aware sleep:
+if item.Error.Type == authErrorLinkButtonNotPressed {
+    // ...
+    lastError = errors.Newf("link button not pressed: %s", item.Error.Description)
+    select {
+    case <-ctx.Done():
+        return "", errors.Wrap(ctx.Err(), "authentication cancelled")
+    case <-time.After(authRetryInterval):
+    }
+    continue
+}
+#+end_src
+
+** 1Password Field Matching Could Be More Explicit
+[[file:internal/credentials/onepassword.go::1502]]
+
+Field matching tries multiple patterns (=api_key=, =apikey=, =CONCEALED= type) but logic could be clearer. Uses OR conditions that might match unintended fields.
+
+Consider explicit priority:
+1. First check for field with =label == "api_key"=
+2. Then =label == "apikey"=
+3. Finally first =CONCEALED= type field
+
+** Unused Logger Warnings
+[[file:cmd/limelight/commands/setup.go::686]]
+
+Failed light fetch logs warning but doesn't impact setup success. User might not see warning if not running with debug logging. Consider printing to stderr as well.
+
+* Low Priority Issues
+
+** Magic Numbers
+- [[file:internal/bridge/auth.go::33]] =authErrorLinkButtonNotPressed = 101= - Hue API error code, acceptable
+- [[file:internal/bridge/auth.go::34]] =authRetryInterval = 2 * time.Second= - reasonable default
+- [[file:internal/bridge/auth.go::35]] =authMaxRetries = 30= - results in 60 second total timeout, acceptable
+
+These are acceptable as named constants.
+
+** File Permissions
+[[file:internal/credentials/config.go::1433]] Config file saved with =0600= permissions - correct for sensitive data.
+[[file:internal/credentials/config.go::1393]] Config directory created with =0755= permissions - correct for directory.
+
+* Positive Observations
+
+** Error Handling
+Consistent use of =cockroachdb/errors= with contextual wrapping. Error messages start with lowercase following Go conventions.
+
+** Logging
+Appropriate use of =zap.Logger= with structured logging. Log levels (Debug, Info, Warn) used correctly.
+
+** Context Propagation
+Context properly propagated through call chains and used for cancellation.
+
+** Separation of Concerns
+Clean package structure:
+- =internal/bridge/= - API client logic
+- =internal/credentials/= - credential and config management
+- =cmd/limelight/commands/= - CLI command implementations
+
+** Code Organization
+Related functionality grouped into appropriate files (auth.go, lights.go, scenes.go, groups.go).
+
+** Conventional Commits
+Commit messages follow conventional commits format with proper prefixes (feat, refactor, chore).
+
+** Security
+- API keys stored in 1Password when available
+- Config file has restrictive permissions (0600)
+- Context used for timeout control
+
+* Recommendations
+
+** Before Merging (Blockers)
+1. Fix TLS certificate handling in HTTP client
+2. Add minimum test coverage for critical paths
+3. Fix resource leak in auth.go (use defer for Body.Close)
+4. Run =go mod tidy= to fix dependency declarations
+
+** High Priority (Should Fix)
+1. Add validation for mutually exclusive flags
+2. Handle ambiguous auth response (both Success and Error nil)
+3. Implement atomic config file writes
+4. Reduce information in error messages
+
+** Nice to Have
+1. Add godoc comments on all exported symbols
+2. Organize imports consistently
+3. Make auth timeout configurable
+4. Improve context handling during sleep
+5. Make 1Password field matching more explicit
+
+* Summary
+
+PR implements solid foundation with good structure, error handling, and logging. However, has critical TLS certificate issue that will cause runtime failures and completely lacks tests.
+
+Recommend: **Request Changes** - Fix TLS issue and add basic tests before merging.
