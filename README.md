@@ -16,11 +16,29 @@ A macOS CLI tool for proactive automation of Philips Hue lights and scenes.
 
 ### Prerequisites
 - Go 1.21 or later
+- Make (for build automation)
 - 1Password CLI (optional, for secure credential storage)
 
 ### Build
 ```bash
+# Using Make (recommended)
+make build
+
+# Or build directly
 go build -o limelight ./cmd/limelight
+```
+
+The `make build` command will:
+1. Format all Go files with `gofmt`
+2. Run all tests
+3. Build the binary
+
+### Additional Make Targets
+```bash
+make fmt     # Format code only
+make test    # Run tests only
+make clean   # Remove binary and clean artifacts
+make all     # Same as make build
 ```
 
 ## Usage
