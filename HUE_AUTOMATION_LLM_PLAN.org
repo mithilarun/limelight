@@ -1,0 +1,167 @@
+#+TITLE: Philips Hue Automation Tool Plan
+#+DATE: 2026-01-10
+
+* Overview
+Build a macOS application called "limelight" that proactively automates Philips Hue lights and scenes based on:
+- External factors (sunrise/sunset)
+- Time patterns (weekday/weekend)
+- User presence (office detection)
+- Natural language commands
+
+* Technical Decisions
+** Language: Go
+   - Strong concurrency for running multiple automations simultaneously
+   - Excellent macOS system integration for presence detection
+   - Native sqlite support via database/sql
+   - Single binary deployment
+   - Easy integration with 1Password CLI
+
+** Interface
+   - CLI tool with natural language commands
+   - Background daemon for proactive automation
+   - Natural language parser for user interactions
+
+** Automation Features
+   - Sunrise/sunset based triggers
+   - Weekday/weekend scheduling
+   - Office presence detection (macOS APIs)
+   - Scene management
+   - Time-based schedules
+
+** Configuration
+   - Bridge IP: Manual configuration
+   - Credentials: Stored in 1Password (accessed via =op= CLI)
+   - Schedules/Rules: SQLite database
+
+** Hue API
+   - Use V2 API (modern, better feature support)
+   - Implement button press authentication flow for initial setup
+
+** Natural Language Processing
+   - Parser for commands like "turn on office lights on weekdays at 9am"
+   - Map natural language to automation rules stored in database
+
+* High-Level Architecture
+** Components
+   1. Hue Bridge Client (internal/bridge/)
+      - V2 API client
+      - Button press authentication flow
+      - Light control operations
+      - Scene management
+      - Group operations
+
+   2. Credential Management (internal/credentials/)
+      - 1Password CLI integration
+      - Retrieve/store bridge API key
+      - Config file for bridge IP
+
+   3. Database Layer (internal/db/)
+      - SQLite schema for automation rules
+      - CRUD operations for schedules
+      - Migration support
+
+   4. Automation Engine (internal/automation/)
+      - Rule evaluation engine
+      - Trigger system (time, sunrise/sunset, presence)
+      - Action executor (lights, scenes)
+      - Concurrent rule execution
+
+   5. Presence Detection (internal/presence/)
+      - macOS APIs for user activity
+      - Office detection logic
+      - State tracking
+
+   6. Sunrise/Sunset Calculator (internal/astro/)
+      - Calculate sunrise/sunset times based on location
+      - Daily schedule updates
+
+   7. Natural Language Parser (internal/nlp/)
+      - Parse commands into automation rules
+      - Extract triggers, conditions, actions
+      - Validation
+
+   8. Daemon (internal/daemon/)
+      - Background service
+      - Event loop for continuous automation
+      - Rule monitoring and execution
+
+   9. CLI Interface (cmd/limelight/)
+      - Natural language command input
+      - Manual light control
+      - Automation management (list, add, remove, edit)
+      - Daemon control (start, stop, status)
+      - Initial setup wizard
+
+** Project Structure
+   #+begin_example
+   limelight/
+   ├── cmd/
+   │   └── limelight/          # Main CLI entry point
+   ├── internal/
+   │   ├── bridge/             # Hue V2 API client
+   │   ├── credentials/        # 1Password integration
+   │   ├── db/                 # SQLite database layer
+   │   │   ├── migrations/     # DB schema migrations
+   │   │   └── models/         # Data models
+   │   ├── automation/         # Rule engine and executor
+   │   ├── presence/           # macOS presence detection
+   │   ├── astro/              # Sunrise/sunset calculations
+   │   ├── nlp/                # Natural language parser
+   │   └── daemon/             # Background service
+   ├── go.mod
+   ├── go.sum
+   ├── README.md
+   └── CLAUDE.md
+   #+end_example
+
+** Database Schema (Draft)
+   #+begin_example
+   Tables:
+   - automations: id, name, enabled, created_at, updated_at
+   - triggers: id, automation_id, type (time/sunset/sunrise/presence), config (JSON)
+   - conditions: id, automation_id, type (weekday/weekend/day), config (JSON)
+   - actions: id, automation_id, type (light/scene/group), config (JSON)
+   #+end_example
+
+* Dependencies
+** Go Modules Needed
+   - github.com/mattn/go-sqlite3 (SQLite driver)
+   - github.com/cockroachdb/errors (error handling)
+   - go.uber.org/zap (logging)
+   - github.com/spf13/cobra (CLI framework)
+   - github.com/stretchr/testify (testing)
+
+* Implementation Plan
+** Phase 1: Foundation
+   1. Initialize Go module
+   2. Set up project structure
+   3. Implement basic Hue V2 API client
+   4. Implement 1Password credential retrieval
+   5. Create initial setup wizard for bridge pairing
+
+** Phase 2: Database & Core Logic
+   6. Design and implement SQLite schema
+   7. Implement database layer with migrations
+   8. Create data models for automations/triggers/conditions/actions
+   9. Implement sunrise/sunset calculator
+
+** Phase 3: Automation Engine
+   10. Build trigger evaluation system
+   11. Implement condition checking
+   12. Build action executor
+   13. Create daemon event loop
+
+** Phase 4: Presence Detection
+   14. Implement macOS presence detection
+   15. Integrate presence into trigger system
+
+** Phase 5: Natural Language Interface
+   16. Build NLP parser for common patterns
+   17. Map parsed input to database models
+   18. Implement CLI commands using natural language
+
+** Phase 6: Testing & Polish
+   19. Write unit tests for all components
+   20. Integration tests for automation workflows
+   21. Documentation
+   22. Create CLAUDE.md
