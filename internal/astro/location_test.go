@@ -135,3 +135,33 @@ func TestSetLocationInConfigInvalidLongitude(t *testing.T) {
 		})
 	}
 }
+
+func TestGetLocationFromConfigInvalidLatitude(t *testing.T) {
+	setupTestEnv(t)
+
+	config := &credentials.Config{
+		BridgeIP:  "192.168.1.100",
+		Latitude:  200.0,
+		Longitude: 0,
+	}
+	err := credentials.SaveConfig(config)
+	require.NoError(t, err)
+
+	_, _, err = GetLocationFromConfig()
+	assert.Error(t, err)
+}
+
+func TestGetLocationFromConfigInvalidLongitude(t *testing.T) {
+	setupTestEnv(t)
+
+	config := &credentials.Config{
+		BridgeIP:  "192.168.1.100",
+		Latitude:  0,
+		Longitude: 500.0,
+	}
+	err := credentials.SaveConfig(config)
+	require.NoError(t, err)
+
+	_, _, err = GetLocationFromConfig()
+	assert.Error(t, err)
+}

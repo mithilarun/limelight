@@ -1,0 +1,131 @@
+PR #4 Review - Phase 2: Database Layer and Astronomical Calculations
+
+  PR: https://github.com/mithilarun/limelight/pull/4
+  Branch: private/mithil/phase2 → main
+  Commit: 58c6891
+
+  Overview
+
+  Phase 2 implementation adds SQLite database layer and sunrise/sunset calculator. The implementation is solid with 65 tests covering migrations, CRUD operations, and astronomical calculations.
+
+  Critical Issues
+
+  1. Location validation incomplete (internal/astro/location.go:19-21)
+  if config.Latitude == 0 && config.Longitude == 0 {
+      return 0, 0, errors.New("latitude and longitude not set in config")
+  }
+  This only catches the case where both are zero. Someone could set latitude=0, longitude=100 (valid coordinates) or latitude=200, longitude=500 (invalid) and both would pass. The validation in SetLocationInConfig (lines 28-33) should also be in GetLocationFromConfig.
+
+  Fix: Add range validation in GetLocationFromConfig:
+  if config.Latitude < -90 || config.Latitude > 90 {
+      return 0, 0, errors.Newf("invalid latitude in config: %f", config.Latitude)
+  }
+  if config.Longitude < -180 || config.Longitude > 180 {
+      return 0, 0, errors.Newf("invalid longitude in config: %f", config.Longitude)
+  }
+
+  Major Issues
+
+  3. No transaction support for composite operations
+  Creating an automation with triggers, conditions, and actions requires multiple calls with no way to wrap them in a transaction. If CreateTrigger fails after CreateAutomation succeeds, you're left with an incomplete automation.
+
+  Suggestion: Add a transaction helper:
+  func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
+      tx, err := db.Begin()
+      if err != nil {
+          return err
+      }
+      defer tx.Rollback()
+
+      if err := fn(tx); err != nil {
+          return err
+      }
+
+      return tx.Commit()
+  }
+
+  4. Polar day/night handling (internal/astro/calculator.go:80-86)
+  Returning errors for "sun never rises" and "sun never sets" treats legitimate geographic scenarios as failures. For automation purposes, you might want to handle these cases differently (e.g., return nil time and a boolean indicating validity, or use a sentinel time value).
+
+  5. Connection pool configuration lacks explanation (internal/db/db.go:26-27)
+  db.SetMaxOpenConns(1)
+  db.SetMaxIdleConns(1)
+  This is correct for SQLite (only one writer allowed), but needs a comment explaining why. Without context, this looks like a mistake.
+
+  Minor Issues
+
+  6. Magic number needs citation (internal/astro/calculator.go:14)
+  sunriseZenith = 90.833
+  The comment mentions "atmospheric refraction and sun's radius" but a reference to the astronomical standard (NOAA algorithm) would be helpful for verification.
+
+  7. No logging in database operations
+  Database CRUD operations don't log anything. When debugging automation issues in production, it will be difficult to trace what happened. Consider adding debug-level logging for create/update/delete operations.
+
+  8. Migration SQL not validated at compile time (internal/db/migrations.go:100)
+  if _, err := tx.Exec(string(content)); err != nil {
+  While using embed.FS ensures the files are trusted, there's no compile-time validation that the SQL is syntactically correct. Consider adding a test that validates each migration file can be parsed.
+
+  9. Test for foreign key enforcement could be stronger (internal/db/migrations_test.go:85)
+  The test inserts a trigger with automation_id=999 (non-existent) and expects an error, but doesn't verify the error is specifically a foreign key violation. SQLite could fail for other reasons.
+
+  10. Cascade delete behavior not documented in code
+  The SQL schema correctly implements CASCADE DELETE (migrations/001_initial_schema.sql:17,26,36), but models/automation.go:160-177 doesn't mention this. Add a comment to DeleteAutomation explaining that triggers/conditions/actions are automatically deleted.
+
+  11. Missing validation for order_index (internal/db/models/action.go:29)
+  CreateAction accepts orderIndex but doesn't validate it's non-negative. While SQLite stores it as INTEGER, negative order_index values could cause unexpected sorting behavior.
+
+  12. Test assertions could be more specific (internal/astro/calculator_test.go:68-69)
+  assert.LessOrEqual(t, hourDiff, 0, "hour should match within tolerance")
+  This asserts hourDiff <= 0, which only allows exact matches. The tolerance parameter is only applied to minutes. Is this intentional? If sunrise is 15:23 and you get 16:23, hourDiff=1 which would fail this assertion.
+
+  Edge Cases to Consider
+
+  13. UpdateAutomation doesn't update updated_at on no-op changes
+  If you call UpdateAutomation with the same name/description, updated_at gets set even though nothing changed. This is probably fine, but worth noting.
+
+  14. Duplicate trigger/condition/action handling
+  Nothing prevents creating duplicate triggers with identical type and config for the same automation. This might be intentional (e.g., multiple time triggers), but could also be a mistake.
+
+  15. Time zone handling in astronomical calculations
+  calculator.go:112 converts UTC to local timezone, but what happens if the user's system timezone changes? The automation engine should recalculate sunrise/sunset when timezone changes.
+
+  Positive Aspects
+
+  - Excellent test coverage: 65 tests with comprehensive edge cases
+  - Proper error wrapping with cockroachdb/errors throughout
+  - Clean separation between db connection, migrations, and models
+  - Idempotent migrations with proper tracking
+  - Foreign key constraints properly enforced
+  - Table-driven tests with good coverage
+  - Proper use of t.Cleanup for test resource management
+  - Astronomical calculations use standard algorithm
+  - Validation of trigger/condition/action types
+  - Cascade delete properly implemented
+
+  Typos
+
+  None found.
+
+  Test Results
+
+  All tests pass:
+  ok  	github.com/mithilarun/limelight/internal/astro	(cached)
+  ok  	github.com/mithilarun/limelight/internal/db	(cached)
+  ok  	github.com/mithilarun/limelight/internal/db/models	(cached)
+
+  Recommendations
+
+  Before Merge:
+  1. Fix location validation in GetLocationFromConfig (Critical #1)
+  2. Add comment explaining connection pool settings (Major #5)
+  3. Document cascade delete in DeleteAutomation (Minor #10)
+
+  For Phase 3:
+  4. Add context.Context support to all database operations (Major #2)
+  5. Add transaction helpers for composite operations (Major #3)
+  6. Consider alternative approach for polar day/night (Major #4)
+  7. Add logging to database operations (Minor #7)
+
+  Conclusion
+
+  Strong implementation with comprehensive testing. The critical issue with location validation should be fixed before merge. The missing context.Context and transaction support will need to be addressed in Phase 3 when building the automation engine. Overall, this provides a solid foundation for the automation system.

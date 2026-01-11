@@ -23,6 +23,7 @@ func Open() (*sql.DB, error) {
 	}
 
 	// Configure connection pool
+	// SQLite only allows one writer at a time, so limit connections to 1
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 

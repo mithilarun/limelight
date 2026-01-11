@@ -101,6 +101,16 @@ func TestDeleteActionNotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestCreateActionNegativeOrderIndex(t *testing.T) {
+	database := setupTestDB(t)
+
+	automation, err := CreateAutomation(database, "Test", "Test automation")
+	require.NoError(t, err)
+
+	_, err = CreateAction(database, automation.ID, ActionTypeScene, map[string]interface{}{"scene_id": "abc"}, -1)
+	assert.Error(t, err)
+}
+
 func TestValidateActionType(t *testing.T) {
 	testCases := []struct {
 		name        string

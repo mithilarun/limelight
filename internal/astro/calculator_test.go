@@ -62,11 +62,11 @@ func TestCalculateSunrise(t *testing.T) {
 			require.NoError(t, err)
 
 			utcSunrise := sunrise.UTC()
-			hourDiff := abs(utcSunrise.Hour() - tc.wantHour)
-			minDiff := abs(utcSunrise.Minute() - tc.wantMin)
+			wantTime := time.Date(tc.date.Year(), tc.date.Month(), tc.date.Day(), tc.wantHour, tc.wantMin, 0, 0, time.UTC)
+			diff := utcSunrise.Sub(wantTime)
+			diffMinutes := abs(int(diff.Minutes()))
 
-			assert.LessOrEqual(t, hourDiff, 0, "hour should match within tolerance")
-			assert.LessOrEqual(t, minDiff, tc.tolerance, "minute should match within %d minutes", tc.tolerance)
+			assert.LessOrEqual(t, diffMinutes, tc.tolerance, "time should match within %d minutes", tc.tolerance)
 		})
 	}
 }
@@ -125,11 +125,11 @@ func TestCalculateSunset(t *testing.T) {
 			require.NoError(t, err)
 
 			utcSunset := sunset.UTC()
-			hourDiff := abs(utcSunset.Hour() - tc.wantHour)
-			minDiff := abs(utcSunset.Minute() - tc.wantMin)
+			wantTime := time.Date(tc.date.Year(), tc.date.Month(), tc.date.Day(), tc.wantHour, tc.wantMin, 0, 0, time.UTC)
+			diff := utcSunset.Sub(wantTime)
+			diffMinutes := abs(int(diff.Minutes()))
 
-			assert.LessOrEqual(t, hourDiff, 0, "hour should match within tolerance")
-			assert.LessOrEqual(t, minDiff, tc.tolerance, "minute should match within %d minutes", tc.tolerance)
+			assert.LessOrEqual(t, diffMinutes, tc.tolerance, "time should match within %d minutes", tc.tolerance)
 		})
 	}
 }

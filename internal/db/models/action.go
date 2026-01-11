@@ -31,6 +31,10 @@ func CreateAction(db *sql.DB, automationID int64, actionType ActionType, config 
 		return nil, err
 	}
 
+	if orderIndex < 0 {
+		return nil, errors.Newf("order_index must be non-negative, got %d", orderIndex)
+	}
+
 	configJSON, err := json.Marshal(config)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal action config")

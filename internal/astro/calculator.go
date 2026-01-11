@@ -11,6 +11,7 @@ const (
 	degreesToRadians = math.Pi / 180.0
 	radiansToDegrees = 180.0 / math.Pi
 	// zenith angle for sunrise/sunset (accounts for atmospheric refraction and sun's radius)
+	// Standard value from NOAA Solar Position Calculator
 	sunriseZenith = 90.833
 )
 

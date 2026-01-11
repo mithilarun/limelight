@@ -20,6 +20,13 @@ func GetLocationFromConfig() (latitude, longitude float64, err error) {
 		return 0, 0, errors.New("latitude and longitude not set in config")
 	}
 
+	if config.Latitude < -90 || config.Latitude > 90 {
+		return 0, 0, errors.Newf("invalid latitude in config: %f (must be between -90 and 90)", config.Latitude)
+	}
+	if config.Longitude < -180 || config.Longitude > 180 {
+		return 0, 0, errors.Newf("invalid longitude in config: %f (must be between -180 and 180)", config.Longitude)
+	}
+
 	return config.Latitude, config.Longitude, nil
 }
 

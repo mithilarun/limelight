@@ -157,7 +157,9 @@ func SetEnabled(db *sql.DB, id int64, enabled bool) error {
 	return nil
 }
 
-// DeleteAutomation deletes an automation and all associated triggers, conditions, and actions
+// DeleteAutomation deletes an automation and all associated triggers, conditions, and actions.
+// Due to CASCADE DELETE foreign key constraints, all related triggers, conditions,
+// and actions are automatically deleted when the automation is deleted.
 func DeleteAutomation(db *sql.DB, id int64) error {
 	result, err := db.Exec("DELETE FROM automations WHERE id = ?", id)
 	if err != nil {
