@@ -1,0 +1,246 @@
+#+TITLE: Phase 2 - Database & Core Logic Implementation Plan
+#+DATE: 2026-01-10
+
+* Overview
+Phase 2 focuses on implementing the SQLite database layer and sunrise/sunset calculator.
+This provides the foundation for storing automation rules and calculating astronomical events.
+
+* Goals
+1. Design SQLite schema for automation rules
+2. Implement database layer with migrations
+3. Create data models for automations, triggers, conditions, and actions
+4. Implement sunrise/sunset calculator
+5. Write comprehensive tests for all components
+
+* Database Schema Design
+
+** Tables
+
+*** automations
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- name TEXT NOT NULL UNIQUE
+- description TEXT
+- enabled BOOLEAN NOT NULL DEFAULT 1
+- created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+- updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+
+*** triggers
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- automation_id INTEGER NOT NULL
+- type TEXT NOT NULL (values: 'time', 'sunrise', 'sunset', 'presence')
+- config TEXT NOT NULL (JSON format)
+- FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE
+
+*** conditions
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- automation_id INTEGER NOT NULL
+- type TEXT NOT NULL (values: 'weekday', 'weekend', 'day_of_week', 'date_range')
+- config TEXT NOT NULL (JSON format)
+- FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE
+
+*** actions
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- automation_id INTEGER NOT NULL
+- order_index INTEGER NOT NULL DEFAULT 0
+- type TEXT NOT NULL (values: 'light', 'scene', 'group')
+- config TEXT NOT NULL (JSON format)
+- FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE
+
+*** config
+- key TEXT PRIMARY KEY
+- value TEXT NOT NULL
+- updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+
+** Config JSON Examples
+
+*** Trigger Configs
+**** time trigger
+#+begin_src json
+{
+  "hour": 9,
+  "minute": 0
+}
+#+end_src
+
+**** sunrise trigger
+#+begin_src json
+{
+  "offset_minutes": 0
+}
+#+end_src
+
+**** sunset trigger
+#+begin_src json
+{
+  "offset_minutes": -30
+}
+#+end_src
+
+**** presence trigger
+#+begin_src json
+{
+  "state": "active"
+}
+#+end_src
+
+*** Condition Configs
+**** weekday condition
+#+begin_src json
+{}
+#+end_src
+
+**** weekend condition
+#+begin_src json
+{}
+#+end_src
+
+**** day_of_week condition
+#+begin_src json
+{
+  "days": [1, 2, 3, 4, 5]
+}
+#+end_src
+
+**** date_range condition
+#+begin_src json
+{
+  "start_date": "2026-01-01",
+  "end_date": "2026-12-31"
+}
+#+end_src
+
+*** Action Configs
+**** light action
+#+begin_src json
+{
+  "light_id": "abc123",
+  "on": true,
+  "brightness": 100,
+  "color_temp": 2700
+}
+#+end_src
+
+**** scene action
+#+begin_src json
+{
+  "scene_id": "xyz789"
+}
+#+end_src
+
+**** group action
+#+begin_src json
+{
+  "group_id": "room123",
+  "on": true,
+  "brightness": 80
+}
+#+end_src
+
+* Implementation Tasks
+
+** Task 1: Add SQLite Dependency
+- Add github.com/mattn/go-sqlite3 to go.mod
+- Run go mod tidy
+
+** Task 2: Database Package Structure
+Create files in internal/db/:
+- db.go: Main database connection and initialization
+- migrations.go: Migration runner
+- migrations/001_initial_schema.sql: Initial schema
+- models/automation.go: Automation model and CRUD
+- models/trigger.go: Trigger model and CRUD
+- models/condition.go: Condition model and CRUD
+- models/action.go: Action model and CRUD
+
+** Task 3: Database Connection (internal/db/db.go)
+- Open function to initialize SQLite database
+- Close function to clean up
+- Database location: ~/.config/limelight/limelight.db
+- Enable foreign keys
+- Set WAL mode for better concurrency
+- Connection pooling configuration
+
+** Task 4: Migration System (internal/db/migrations.go)
+- Embed migration files using embed.FS
+- Track applied migrations in schema_migrations table
+- RunMigrations function to apply pending migrations
+- Migrations run in transaction
+- Idempotent migration execution
+
+** Task 5: Initial Schema Migration (internal/db/migrations/001_initial_schema.sql)
+- Create all tables with proper constraints
+- Create indices for foreign keys
+- Create index on automations.enabled
+- Create schema_migrations table
+
+** Task 6: Automation Model (internal/db/models/automation.go)
+- Automation struct with JSON tags
+- CreateAutomation(db, name, description) error
+- GetAutomation(db, id) (*Automation, error)
+- ListAutomations(db) ([]*Automation, error)
+- UpdateAutomation(db, id, updates) error
+- DeleteAutomation(db, id) error
+- SetEnabled(db, id, enabled) error
+
+** Task 7: Trigger Model (internal/db/models/trigger.go)
+- Trigger struct with JSON tags
+- Config field parsed from JSON
+- CreateTrigger(db, automationID, type, config) error
+- GetTriggers(db, automationID) ([]*Trigger, error)
+- DeleteTrigger(db, id) error
+
+** Task 8: Condition Model (internal/db/models/condition.go)
+- Condition struct with JSON tags
+- Config field parsed from JSON
+- CreateCondition(db, automationID, type, config) error
+- GetConditions(db, automationID) ([]*Condition, error)
+- DeleteCondition(db, id) error
+
+** Task 9: Action Model (internal/db/models/action.go)
+- Action struct with JSON tags
+- Config field parsed from JSON
+- Support for order_index
+- CreateAction(db, automationID, type, config, orderIndex) error
+- GetActions(db, automationID) ([]*Action, error)
+- DeleteAction(db, id) error
+
+** Task 10: Sunrise/Sunset Calculator (internal/astro/)
+Create files:
+- calculator.go: Core astronomical calculations
+- location.go: Location management
+
+*** calculator.go
+- CalculateSunrise(lat, lon, date) time.Time
+- CalculateSunset(lat, lon, date) time.Time
+- Use standard astronomical algorithm (sunrise at -0.833 degrees)
+- Return times in local timezone
+- Handle polar day/night cases
+
+*** location.go
+- GetLocationFromConfig() (lat, lon, error)
+- Location stored in credentials config file
+
+** Task 11: Tests
+Write tests for:
+- Database initialization and migrations
+- CRUD operations for all models
+- Sunrise/sunset calculations with known values
+- Edge cases (invalid data, constraint violations, polar regions)
+
+* Dependencies to Add
+- github.com/mattn/go-sqlite3 v1.14.24
+
+* Success Criteria
+- All database operations work correctly
+- Migrations apply successfully
+- Foreign key constraints enforced
+- Sunrise/sunset calculations accurate within 1 minute
+- All tests pass
+- Code follows Go best practices
+
+* Notes
+- Use prepared statements to prevent SQL injection
+- All database operations should use transactions where appropriate
+- Config JSON validation happens at application layer, not database
+- Error messages must include context using errors.Wrap
+- Sunrise/sunset calculator should cache daily results
