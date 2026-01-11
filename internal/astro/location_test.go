@@ -165,3 +165,22 @@ func TestGetLocationFromConfigInvalidLongitude(t *testing.T) {
 	_, _, err = GetLocationFromConfig()
 	assert.Error(t, err)
 }
+
+func TestSetLocationByCity(t *testing.T) {
+	t.Skip("Skipping live API test - requires internet connection and respects Nominatim usage policy")
+
+	setupTestEnv(t)
+
+	result, err := SetLocationByCity("London")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Greater(t, result.Latitude, 51.0)
+	assert.Less(t, result.Latitude, 52.0)
+	assert.Contains(t, result.DisplayName, "London")
+
+	lat, lon, err := GetLocationFromConfig()
+	require.NoError(t, err)
+	assert.Equal(t, result.Latitude, lat)
+	assert.Equal(t, result.Longitude, lon)
+}

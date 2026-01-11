@@ -57,3 +57,17 @@ func SetLocationInConfig(latitude, longitude float64) error {
 
 	return nil
 }
+
+// SetLocationByCity looks up a city's coordinates using geocoding and saves them to config
+func SetLocationByCity(cityName string) (*GeocodingResult, error) {
+	result, err := GeocodeCity(cityName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to geocode city: %s", cityName)
+	}
+
+	if err := SetLocationInConfig(result.Latitude, result.Longitude); err != nil {
+		return nil, errors.Wrap(err, "failed to save location to config")
+	}
+
+	return result, nil
+}
